@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>Twitch Chat Overlay</title>
+  <style>
+    body {
+      margin: 0;
+      background: transparent;
+      overflow: hidden;
+      font-family: "Segoe UI", Arial, sans-serif;
+    }
+    #chat-container {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      padding: 10px;
+      box-sizing: border-box;
+    }
+    .chat-message {
+      display: inline-block;
+      margin: 5px 0;
+      padding: 8px 12px;
+      background: rgba(0, 0, 0, 0.6);
+      border-radius: 15px;
+      max-width: 85%;
+      font-size: 18px;
+      line-height: 1.4em;
+      box-shadow: 0 3px 8px rgba(0,0,0,0.4);
+      animation: fadein 0.3s ease, fadeout 0.3s ease 15s forwards;
+    }
+    .username {
+      font-weight: bold;
+      margin-right: 8px;
+    }
+    .message {
+      color: #ffffff;
+    }
+    @keyframes fadein {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeout {
+      from { opacity: 1; transform: translateY(0); }
+      to   { opacity: 0; transform: translateY(-10px); }
+    }
+    #controls {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 10;
+      background: rgba(0,0,0,0.5);
+      padding: 5px 10px;
+      border-radius: 8px;
+    }
+    button {
+      margin: 0 5px;
+      padding: 5px 10px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <button onclick="connect()">連線</button>
+    <button onclick="disconnect()">斷線</button>
+  </div>
+  <div id="chat-container"></div>
+
+  <script>
+    let ws = null;
+    const channel = "gwoobar"; // 👈 改成你的小寫 Twitch 帳號
+
+    function connect() {
+      if (ws) return;
+      ws = new WebSocket("wss://irc-ws.chat.twitch.tv:443");
+
+      ws.onopen = () => {
+        console.log("已連線到 Twitch IRC");
+        ws.send("PASS oauth:dummy");
+        ws.send("NICK justinfan12345");
+        ws.send(`JOIN #${channel}`);
+      };
+
+      ws.onmessage = (event) => {
+        const msg = event.data;
+        if (msg.includes("PRIVMSG")) {
+          const username = msg.match(/:(\w+)!\w+@\w+\.tmi\.twitch\.tv/)[1];
+          const message = msg.split(`PRIVMSG #${channel} :`)[1];
+          addChatMessage(username, message);
+        }
+      };
+
+      ws.onclose = () => {
+        console.log("已斷開 Twitch IRC");
+        ws = null;
+      };
+    }
+
+    function disconnect() {
+      if (ws) {
+        ws.close();
+        ws = null;
+      }
+    }
+
+    function addChatMessage(username, message) {
+      const container = document.getElementById("chat-container");
+      const div = document.createElement("div");
+      div.className = "chat-message";
+
+      div.innerHTML = `<span class="username" style="color:${stringToColor(username)}">${username}:</span>
+                       <span class="message">${escapeHtml(message)}</span>`;
+
+      container.appendChild(div);
+
+      if (container.childNodes.length > 10) {
+        container.removeChild(container.firstChild);
+      }
+    }
+
+    function stringToColor(str) {
+      const colors = ["#FF5555","#55FF55","#5555FF","#FFAA00","#FF55FF","#00AAAA","#AAAA00"];
+      let hash = 0;
+      for (let i = 0; i < str.length; i++) {
+        hash = str.charCodeAt(i) + ((hash << 5) - hash);
+      }
+      return colors[Math.abs(hash) % colors.length];
+    }
+
+    function escapeHtml(text) {
+      return text.replace(/[&<>"']/g, (m) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
+      }[m]));
+    }
+  </script>
+</body>
+</html>
